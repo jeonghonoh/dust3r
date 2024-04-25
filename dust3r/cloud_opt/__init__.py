@@ -20,6 +20,16 @@ class GlobalAlignerMode(Enum):
 def global_aligner(dust3r_output, device, mode=GlobalAlignerMode.PointCloudOptimizer, **optim_kw):
     # extract all inputs
     view1, view2, pred1, pred2 = [dust3r_output[k] for k in 'view1 view2 pred1 pred2'.split()]
+    #print dictionary shape
+    # for key in view1:
+    #     print("view1: ", f"{key}: {len(view1[key])} items")
+    # for key in view2:
+    #     print("view2: ", f"{key}: {len(view2[key])} items")
+    # for key in pred1:
+    #     print("pred1: ", f"{key}: {len(pred1[key])} items")
+    # for key in pred2:
+    #     print("pred2: ", f"{key}: {len(pred2[key])} items")
+
     # build the optimizer
     if mode == GlobalAlignerMode.PointCloudOptimizer:
         net = PointCloudOptimizer(view1, view2, pred1, pred2, **optim_kw).to(device)
