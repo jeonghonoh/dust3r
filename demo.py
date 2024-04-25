@@ -380,7 +380,7 @@ def get_pointcloud_cam_param(model, args):
     if len(imgs) == 1:
         imgs = [imgs[0], copy.deepcopy(imgs[0])]
         imgs[1]['idx'] = 1
-    pairs = make_pairs(imgs, scene_graph=args.scenegraph_type, prefilter=None, symmetrize=args.symmetrize)
+    pairs = make_pairs(imgs, scene_graph=args.scene_graph, prefilter=None, symmetrize=args.symmetrize)
     output = inference(pairs, model, device, batch_size=batch_size, verbose=not silent)
     # print("len: ", len(imgs), len(pairs), len(output))
     mode = GlobalAlignerMode.PointCloudOptimizer if len(imgs) > 2 else GlobalAlignerMode.PairViewer
