@@ -48,6 +48,8 @@ def get_args_parser():
                         help="silence logs")
     parser.add_argument("--input_path", type=str, default=None, help="path to the input image")
     parser.add_argument("--out_dir", type=str, default=None, help="path to the output directory")
+    parser.add_argument("--scene_type", type=str, default="complete", help="type of scene graph")
+    parser.add_argument("--symmetrize", type=bool, default=True, help="symmetrize the pairs")
     return parser
 
 
@@ -68,11 +70,9 @@ def _convert_scene_output_to_ply(outdir, imgs, pts3d, mask, focals, cams2world, 
         col = np.concatenate([p[m] for p, m in zip(imgs, mask)])
         pct = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
         # print("pts.shape: ", pts.shape)
-        # print("pts: ", pts)
         # print("col.shape: ", col.shape)
-        # print("col: ", col)
         # print("pct.shape: ", pct.vertices.shape)
-        # print("pct: ", pct)
+        # print("color.shape: ", pct.colors.shape)
         scene.add_geometry(pct)
     else:
         meshes = []
@@ -94,13 +94,28 @@ def _convert_scene_output_to_ply(outdir, imgs, pts3d, mask, focals, cams2world, 
     rot = np.eye(4)
     rot[:3, :3] = Rotation.from_euler('y', np.deg2rad(180)).as_matrix()
     scene.apply_transform(np.linalg.inv(cams2world[0] @ OPENGL @ rot))
-    #print scene information
-    print("scene: ", scene)
 
     outfile = os.path.join(outdir, 'scene.ply')
+    out_point_cloud = os.path.join(outdir, 'pointcloud.ply')
+    #if path does not exist, create it
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     if not silent:
         print('(exporting 3D scene to', outfile, ')')
     scene.export(file_obj=outfile)
+    # scene = trimesh.load(outfile)
+    # print("final check")
+    # print("scene: ", scene)
+    mesh = scene.geometry
+    for key in mesh:
+        if type(mesh[key]) == trimesh.PointCloud:
+            pointcloud = mesh[key]
+            print("pointcloud: ", pointcloud)
+            print("pointcloud.vertices: ", pointcloud.vertices.shape)
+            print("pointcloud.colors: ", pointcloud.colors.shape)
+            pointcloud.export(out_point_cloud)
+            print("pointcloud exported to: ", out_point_cloud)
     return outfile
 
 def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, cam_size=0.05,
@@ -119,10 +134,6 @@ def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, 
         pts = np.concatenate([p[m] for p, m in zip(pts3d, mask)])
         col = np.concatenate([p[m] for p, m in zip(imgs, mask)])
         pct = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
-        print("pts.shape: ", pts.shape)
-        print("col.shape: ", col.shape)
-        print("pct.shape: ", pct.vertices.shape)
-        print("color.shape: ", pct.colors.shape)
         scene.add_geometry(pct)
     else:
         meshes = []
@@ -145,21 +156,10 @@ def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, 
     rot[:3, :3] = Rotation.from_euler('y', np.deg2rad(180)).as_matrix()
     scene.apply_transform(np.linalg.inv(cams2world[0] @ OPENGL @ rot))
     outfile = os.path.join(outdir, 'scene.glb')
-    out_point_cloud = os.path.join(outdir, 'pointcloud.ply')
     if not silent:
         print('(exporting 3D scene to', outfile, ')')
     scene.export(file_obj=outfile)
-    # scene = trimesh.load(outfile)
-    print("final check")
-    print("scene: ", scene)
-    mesh = scene.geometry
-    for key in mesh:
-        if type(mesh[key]) == trimesh.PointCloud:
-            pointcloud = mesh[key]
-            print("pointcloud: ", pointcloud)
-            print("pointcloud.vertices: ", pointcloud.vertices.shape)
-            print("pointcloud.colors: ", pointcloud.colors.shape)
-            pointcloud.export(out_point_cloud)
+    
     return outfile
 
 def get_3D_model_from_scene_type_ply(outdir, silent, scene, min_conf_thr=3, as_pointcloud=False, mask_sky=False,
@@ -380,7 +380,7 @@ def get_pointcloud_cam_param(model, args):
     if len(imgs) == 1:
         imgs = [imgs[0], copy.deepcopy(imgs[0])]
         imgs[1]['idx'] = 1
-    pairs = make_pairs(imgs, scene_graph='complete', prefilter=None, symmetrize=True)
+    pairs = make_pairs(imgs, scene_graph=args.scenegraph_type, prefilter=None, symmetrize=args.symmetrize)
     output = inference(pairs, model, device, batch_size=batch_size, verbose=not silent)
     # print("len: ", len(imgs), len(pairs), len(output))
     mode = GlobalAlignerMode.PointCloudOptimizer if len(imgs) > 2 else GlobalAlignerMode.PairViewer
@@ -388,7 +388,7 @@ def get_pointcloud_cam_param(model, args):
     lr = 0.01
     if mode == GlobalAlignerMode.PointCloudOptimizer:
         loss = scene.compute_global_alignment(init='mst', niter=300, schedule='linear', lr=lr)
-    outfile = get_3D_model_from_scene(args.out_dir, silent, scene, min_conf_thr=3, as_pointcloud=True, mask_sky=False,)
+    outfile = get_3D_model_from_scene_type_ply(args.out_dir, silent, scene, min_conf_thr=3, as_pointcloud=True, mask_sky=False,)
     cam_intrinsics = scene.get_intrinsics()
     cam_extrinsics = scene.get_im_poses()
     #save camera parameters in out_dir, pair with file name
